@@ -1,0 +1,13 @@
+# Core dependencies
+keyboard>=0.13.5
+sounddevice>=0.4.6
+numpy>=1.24.0
+rich>=13.0.0
+pyperclip>=1.8.2
+
+# Phase 2: Transcription
+faster-whisper>=1.0.0
+
+# Phase 3: LLM cleanup (optional)
+# llama-cpp-python>=0.2.0   # uncomment and install separately (large, GPU variant)
+# ollama                     # not needed; we use urllib.request for HTTP

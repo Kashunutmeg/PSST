@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+*.whl
+
+# Virtual environment
+.venv/
+venv/
+ENV/
+
+# Whisper model cache
+models/
+~/.cache/huggingface/
+
+# Audio cue files (generated at runtime)
+sounds/
+
+# User config (keep example, ignore personal)
+config.toml
+!config.example.toml
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+
+# Claude Code session data
+.claude/
+*.swp
+*.swo
+
+# Logs
+*.log
+psst.log
+
+# Temp
+*.tmp
+*.bak

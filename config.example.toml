@@ -1,0 +1,98 @@
+# PSST — Push, Speak, Send Text
+# Example configuration file.
+#
+# Copy this to config.toml in the same directory (or %APPDATA%/psst/config.toml)
+# and edit as needed. All values shown are the defaults.
+#
+# Config search order:
+#   1. --config CLI flag
+#   2. ./config.toml  (same directory as where you run psst)
+#   3. %APPDATA%/psst/config.toml
+#   4. ~/.psst/config.toml
+#   5. Built-in defaults (no file needed)
+
+# ---------------------------------------------------------------------------
+# Hotkey
+# ---------------------------------------------------------------------------
+# Hold this key combo to record. Release to transcribe.
+# Examples: "ctrl+shift+space", "right ctrl", "f13"
+hotkey = "ctrl+shift+space"
+
+# ---------------------------------------------------------------------------
+# Audio recording
+# ---------------------------------------------------------------------------
+sample_rate = 16000        # Hz — Whisper expects 16 kHz
+channels = 1               # Mono
+min_recording_seconds = 0.3
+max_recording_seconds = 300.0   # 300 = 5 minutes — adjust to taste
+
+# ---------------------------------------------------------------------------
+# Whisper transcription
+# ---------------------------------------------------------------------------
+# Model sizes (smaller = faster, larger = more accurate):
+#   tiny, base, small, medium, large-v2, large-v3
+model = "base"
+
+# Device: "auto" detects CUDA; use "cpu" to force CPU
+device = "auto"
+
+# Compute type: "auto" picks float16 (CUDA) or int8 (CPU)
+# Options: "auto", "float16", "int8", "float32"
+compute_type = "auto"
+
+# Language code (e.g. "en", "fr", "de") or leave unset for auto-detection
+# language = "en"
+
+# Voice activity detection filter — skip silence-only segments
+vad_filter = true
+
+# ---------------------------------------------------------------------------
+# LLM cleanup  (on by default — requires llama_cpp_model_path or Ollama)
+# ---------------------------------------------------------------------------
+# When enabled, Whisper output is passed through a local LLM to fix
+# punctuation, capitalisation, and remove remaining filler words.
+# Note: Whisper itself already suppresses many filler words via its VAD
+# filter; LLM cleanup adds capitalisation, punctuation, and catches the rest.
+# If the configured backend cannot be initialised, PSST silently falls back
+# to Whisper output — your dictation is never lost.
+cleanup_enabled = true
+
+# Backend: "llama_cpp" (recommended — plug-and-play with a GGUF file)
+#          "ollama"    (requires Ollama running locally)
+cleanup_backend = "llama_cpp"
+
+# Model name (used by Ollama backend); for llama_cpp use llama_cpp_model_path
+# Ollama pull: ollama pull qwen3.5:4b
+cleanup_model = "qwen3.5:4b"
+
+# Timeout in seconds before falling back to Whisper text
+cleanup_timeout = 10
+
+# ---------------------------------------------------------------------------
+# llama_cpp backend (recommended)
+# ---------------------------------------------------------------------------
+# Download a Qwen GGUF from https://huggingface.co and set the path below.
+# Example: qwen3.5-4b-instruct-q4_k_m.gguf
+# llama_cpp_model_path = "C:/models/qwen3.5-4b-instruct-q4_k_m.gguf"
+
+# ---------------------------------------------------------------------------
+# Ollama backend
+# ---------------------------------------------------------------------------
+# Ollama server URL (only used when cleanup_backend = "ollama")
+ollama_url = "http://localhost:11434"
+
+# ---------------------------------------------------------------------------
+# UI / output
+# ---------------------------------------------------------------------------
+# Number of past transcriptions to keep in session history
+history_size = 10
+
+# Play audio cues (start/stop/done tones). Windows only.
+audio_cues = true
+
+# Write transcriptions to a log file
+log_to_file = false
+log_file = "psst.log"
+
+# Fall back to ctypes clipboard API if pyperclip fails
+clipboard_fallback = true

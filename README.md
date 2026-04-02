@@ -14,7 +14,7 @@ Privacy-first alternative to Wispr Flow — nothing leaves your machine.
 ## Requirements
 
 - Windows 10/11 (primary target; Linux/Mac partial support)
-- Python 3.11+
+- Python 3.10+
 - NVIDIA GPU recommended (RTX series with CUDA) — CPU works too, just slower
 
 ## Quick start

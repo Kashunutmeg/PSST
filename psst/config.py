@@ -12,10 +12,20 @@ from __future__ import annotations
 
 import argparse
 import os
-import tomllib
+import sys
 from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    try:
+        import tomli as tomllib  # type: ignore[no-redef]
+    except ImportError as exc:
+        raise ImportError(
+            "tomli is required on Python < 3.11. Install it with: pip install tomli"
+        ) from exc
 
 from psst import __version__
 

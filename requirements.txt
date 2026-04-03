@@ -9,6 +9,10 @@ pyperclip>=1.8.2
 # Phase 2: Transcription
 faster-whisper>=1.0.0
 
+# System tray integration
+pystray>=0.19.0
+Pillow>=10.0.0
+
 # Phase 3: LLM cleanup (optional)
 # llama-cpp-python>=0.2.0   # uncomment and install separately (large, GPU variant)
 # ollama                     # not needed; we use urllib.request for HTTP

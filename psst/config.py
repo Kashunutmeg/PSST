@@ -13,7 +13,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -31,6 +31,50 @@ from psst import __version__
 
 
 # ---------------------------------------------------------------------------
+# Admin detection
+# ---------------------------------------------------------------------------
+
+def is_admin() -> bool:
+    """Return True if running with elevated (admin) privileges on Windows."""
+    if sys.platform != "win32":
+        return True  # Non-Windows: concept doesn't apply
+    try:
+        import ctypes
+        return bool(ctypes.windll.shell32.IsUserAnAdmin())
+    except Exception:
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Default prompt profiles
+# ---------------------------------------------------------------------------
+
+DEFAULT_PROMPTS: Dict[str, Dict[str, str]] = {
+    "default": {
+        "name": "Default Dictation",
+        "instruction": (
+            "Clean up this dictated text. Fix grammar, punctuation, and remove "
+            "filler words. Do not change the meaning. Return only the cleaned text."
+        ),
+    },
+    "code": {
+        "name": "Code Docstrings",
+        "instruction": (
+            "This is dictated documentation for code. Format it as a proper "
+            "docstring. Fix grammar and make it technical and concise."
+        ),
+    },
+    "actions": {
+        "name": "Action Items",
+        "instruction": (
+            "Extract action items from this dictated text. Format as a numbered "
+            "list of clear, actionable tasks."
+        ),
+    },
+}
+
+
+# ---------------------------------------------------------------------------
 # Defaults
 # ---------------------------------------------------------------------------
 
@@ -38,6 +82,7 @@ from psst import __version__
 class Config:
     # Hotkey
     hotkey: str = "ctrl+shift+space"
+    cancel_hotkey: str = "escape"
 
     # Audio recording
     sample_rate: int = 16000
@@ -59,6 +104,12 @@ class Config:
     cleanup_timeout: int = 10
     ollama_url: str = "http://localhost:11434"
     llama_cpp_model_path: str = ""
+
+    # Prompt profiles
+    active_prompt: str = "default"
+    prompts: Dict[str, Any] = field(
+        default_factory=lambda: {k: dict(v) for k, v in DEFAULT_PROMPTS.items()}
+    )
 
     # UI
     history_size: int = 10
@@ -122,7 +173,12 @@ def load_config(config_path: Optional[str] = None) -> Config:
     if found:
         with open(found, "rb") as fh:
             data = tomllib.load(fh)
+        # Extract [prompts.*] before _apply_section flattens nested dicts
+        prompts_data = data.pop("prompts", None)
         _apply_section(cfg, data)
+        if isinstance(prompts_data, dict):
+            # Merge user-defined profiles with defaults
+            cfg.prompts.update(prompts_data)
     return cfg
 
 
@@ -168,6 +224,10 @@ def parse_args() -> argparse.Namespace:
         help="Write session log to psst.log",
     )
     parser.add_argument(
+        "--prompt", metavar="PROFILE",
+        help='Active prompt profile name, e.g. "default", "code", "actions"',
+    )
+    parser.add_argument(
         "--version", action="version",
         version=f"%(prog)s {__version__}",
     )
@@ -194,5 +254,7 @@ def get_config() -> Config:
         cfg.language = args.language
     if args.log:
         cfg.log_to_file = True
+    if args.prompt:
+        cfg.active_prompt = args.prompt
 
     return cfg

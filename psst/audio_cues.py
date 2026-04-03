@@ -5,9 +5,10 @@ so they never block the main thread or the recording pipeline.
 
 Tones:
   start  — 440 Hz  (A4, "listening")
-  stop   — 330 Hz  (E4, "done recording")
+  stop   — 330 Hz  (E4, "done recording") — overridden by pssst.wav if present
   done   — 660 Hz  (E5, "copied to clipboard")
   error  — 220 Hz  (A3, "something went wrong")
+  cancel — 180 Hz  (low short tone, "recording cancelled")
 """
 
 from __future__ import annotations
@@ -29,10 +30,11 @@ SOUNDS_DIR = Path(__file__).parent.parent / "sounds"
 
 TONE_SPEC: Dict[str, tuple[float, float]] = {
     # name -> (frequency_hz, duration_seconds)
-    "start": (440.0, 0.12),
-    "stop":  (330.0, 0.10),
-    "done":  (660.0, 0.14),
-    "error": (220.0, 0.20),
+    "start":  (440.0, 0.12),
+    "stop":   (330.0, 0.10),
+    "done":   (660.0, 0.14),
+    "error":  (220.0, 0.20),
+    "cancel": (180.0, 0.08),
 }
 
 SAMPLE_RATE = 44100
@@ -115,6 +117,17 @@ def play_start() -> None:
     play("start")
 
 def play_stop() -> None:
+    """Play stop sound. Uses custom pssst.wav from CWD if present."""
+    try:
+        custom = Path.cwd() / "pssst.wav"
+        if custom.exists():
+            winsound.PlaySound(
+                str(custom),
+                winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_NODEFAULT,
+            )
+            return
+    except Exception:
+        pass
     play("stop")
 
 def play_done() -> None:
@@ -122,3 +135,6 @@ def play_done() -> None:
 
 def play_error() -> None:
     play("error")
+
+def play_cancel() -> None:
+    play("cancel")

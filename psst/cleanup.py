@@ -5,7 +5,8 @@ Backends:
   LlamaCppBackend  — llama-cpp-python bindings (optional, not in default requirements)
 
 Contract:
-  - clean(text) always returns a string (raw text on any failure)
+  - clean(text, instruction=None) always returns a string (raw text on any failure)
+  - If instruction is None, the built-in SYSTEM_PROMPT is used
   - All failures are logged and swallowed — never lose the user's dictation
 
 System prompt:
@@ -42,8 +43,14 @@ SYSTEM_PROMPT = (
 
 class CleanupBackend(ABC):
     @abstractmethod
-    def clean(self, text: str) -> str:
-        """Return cleaned text. Must never raise — return raw text on failure."""
+    def clean(self, text: str, instruction: Optional[str] = None) -> str:
+        """Return cleaned text. Must never raise — return raw text on failure.
+
+        Args:
+            text: Raw transcription text to clean.
+            instruction: Optional system prompt override. If None, the default
+                SYSTEM_PROMPT is used.
+        """
         ...
 
 
@@ -58,10 +65,11 @@ class OllamaBackend(CleanupBackend):
         self.timeout = timeout
         self._generate_url = f"{self.base_url}/api/generate"
 
-    def clean(self, text: str) -> str:
+    def clean(self, text: str, instruction: Optional[str] = None) -> str:
+        system = instruction if instruction is not None else SYSTEM_PROMPT
         payload = {
             "model": self.model,
-            "system": SYSTEM_PROMPT,
+            "system": system,
             "prompt": text,
             "stream": False,
         }
@@ -108,11 +116,12 @@ class LlamaCppBackend(CleanupBackend):
         self._llm = Llama(model_path=self.model_path, n_ctx=2048, verbose=False)
         return self._llm
 
-    def clean(self, text: str) -> str:
+    def clean(self, text: str, instruction: Optional[str] = None) -> str:
+        system = instruction if instruction is not None else SYSTEM_PROMPT
         try:
             llm = self._load()
             prompt = (
-                f"<|im_start|>system\n{SYSTEM_PROMPT}<|im_end|>\n"
+                f"<|im_start|>system\n{system}<|im_end|>\n"
                 f"<|im_start|>user\n{text}<|im_end|>\n"
                 f"<|im_start|>assistant\n"
             )

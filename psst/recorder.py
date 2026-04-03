@@ -116,6 +116,23 @@ class Recorder:
 
         return audio
 
+    def cancel(self) -> None:
+        """Stop recording and discard all captured audio chunks."""
+        with self._lock:
+            if not self._recording:
+                return
+            stream = self._stream
+            self._stream = None
+            self._recording = False
+            self._chunks = []
+
+        if stream is not None:
+            try:
+                stream.stop()
+                stream.close()
+            except Exception:
+                pass
+
     @property
     def is_recording(self) -> bool:
         return self._recording

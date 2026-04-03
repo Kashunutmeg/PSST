@@ -6,6 +6,7 @@ Run with:  python -m pytest tests/  -v
 
 from __future__ import annotations
 
+import json
 import os
 import queue
 import sys
@@ -146,6 +147,99 @@ class TestConfigVersion(unittest.TestCase):
         # The important thing is no SystemExit(2) (which would mean error)
 
 
+class TestConfigNewFields(unittest.TestCase):
+    def test_cancel_hotkey_default(self):
+        from psst.config import Config
+        cfg = Config()
+        self.assertEqual(cfg.cancel_hotkey, "escape")
+
+    def test_active_prompt_default(self):
+        from psst.config import Config
+        cfg = Config()
+        self.assertEqual(cfg.active_prompt, "default")
+
+    def test_prompts_default_has_three_profiles(self):
+        from psst.config import Config
+        cfg = Config()
+        self.assertIn("default", cfg.prompts)
+        self.assertIn("code", cfg.prompts)
+        self.assertIn("actions", cfg.prompts)
+
+    def test_prompts_default_profile_has_instruction(self):
+        from psst.config import Config
+        cfg = Config()
+        self.assertIn("instruction", cfg.prompts["default"])
+        self.assertIsInstance(cfg.prompts["default"]["instruction"], str)
+        self.assertGreater(len(cfg.prompts["default"]["instruction"]), 0)
+
+    def test_prompts_loaded_from_toml(self):
+        from psst.config import load_config
+        content = (
+            b'active_prompt = "code"\n'
+            b'[prompts.custom]\n'
+            b'name = "Custom"\n'
+            b'instruction = "Do custom stuff."\n'
+        )
+        with tempfile.NamedTemporaryFile(suffix=".toml", delete=False) as f:
+            f.write(content)
+            path = f.name
+        try:
+            cfg = load_config(path)
+            self.assertEqual(cfg.active_prompt, "code")
+            self.assertIn("custom", cfg.prompts)
+            self.assertEqual(cfg.prompts["custom"]["instruction"], "Do custom stuff.")
+            # Default built-in profiles still present
+            self.assertIn("default", cfg.prompts)
+        finally:
+            os.unlink(path)
+
+    def test_prompts_instances_are_independent(self):
+        """Two Config() instances must not share the same prompts dict."""
+        from psst.config import Config
+        cfg1 = Config()
+        cfg2 = Config()
+        cfg1.prompts["new_key"] = {"instruction": "x"}
+        self.assertNotIn("new_key", cfg2.prompts)
+
+    def test_cancel_hotkey_loaded_from_toml(self):
+        from psst.config import load_config
+        content = b'cancel_hotkey = "f1"\n'
+        with tempfile.NamedTemporaryFile(suffix=".toml", delete=False) as f:
+            f.write(content)
+            path = f.name
+        try:
+            cfg = load_config(path)
+            self.assertEqual(cfg.cancel_hotkey, "f1")
+        finally:
+            os.unlink(path)
+
+
+class TestIsAdmin(unittest.TestCase):
+    def test_is_admin_returns_bool(self):
+        from psst.config import is_admin
+        result = is_admin()
+        self.assertIsInstance(result, bool)
+
+    def test_is_admin_on_non_windows_returns_true(self):
+        from psst.config import is_admin
+        with patch("psst.config.sys") as mock_sys:
+            mock_sys.platform = "linux"
+            result = is_admin()
+        self.assertTrue(result)
+
+    def test_is_admin_handles_exception_gracefully(self):
+        from psst.config import is_admin
+        with patch("psst.config.sys") as mock_sys:
+            mock_sys.platform = "win32"
+            with patch("ctypes.windll", side_effect=AttributeError("no windll")):
+                # Should not raise — returns False on any exception
+                try:
+                    result = is_admin()
+                    self.assertIsInstance(result, bool)
+                except Exception:
+                    self.fail("is_admin() raised unexpectedly")
+
+
 # ---------------------------------------------------------------------------
 # psst.audio_cues — WAV generation
 # ---------------------------------------------------------------------------
@@ -165,7 +259,7 @@ class TestAudioCuesWAVGeneration(unittest.TestCase):
                 expected_frames = int(44100 * 0.1)
                 self.assertEqual(wf.getnframes(), expected_frames)
 
-    def test_generate_wav_all_four_tones(self):
+    def test_generate_wav_all_tones(self):
         from psst.audio_cues import _generate_wav, TONE_SPEC
         with tempfile.TemporaryDirectory() as d:
             for name, (freq, dur) in TONE_SPEC.items():
@@ -183,8 +277,7 @@ class TestAudioCuesWAVGeneration(unittest.TestCase):
             self.assertTrue(path.exists())
 
     def test_ensure_sounds_returns_all_paths(self):
-        from psst.audio_cues import _ensure_sounds, SOUNDS_DIR, TONE_SPEC
-        # Patch SOUNDS_DIR to a temp directory
+        from psst.audio_cues import _ensure_sounds, TONE_SPEC
         with tempfile.TemporaryDirectory() as d:
             with patch("psst.audio_cues.SOUNDS_DIR", Path(d)):
                 from psst import audio_cues
@@ -209,12 +302,57 @@ class TestAudioCuesWAVGeneration(unittest.TestCase):
         from psst import audio_cues
         with patch.object(audio_cues, "play") as mock_play:
             audio_cues.play_start()
-            audio_cues.play_stop()
             audio_cues.play_done()
             audio_cues.play_error()
+            audio_cues.play_cancel()
         self.assertEqual(mock_play.call_count, 4)
         names = [call.args[0] for call in mock_play.call_args_list]
-        self.assertEqual(names, ["start", "stop", "done", "error"])
+        self.assertEqual(names, ["start", "done", "error", "cancel"])
+
+    def test_play_stop_falls_back_to_play_when_no_custom_wav(self):
+        """play_stop() uses generated tone when pssst.wav does not exist."""
+        from psst import audio_cues
+        with tempfile.TemporaryDirectory() as d:
+            # Patch Path.cwd() so the "CWD" is a temp dir with no pssst.wav
+            with patch("pathlib.Path.cwd", return_value=Path(d)):
+                with patch.object(audio_cues, "play") as mock_play:
+                    audio_cues.play_stop()
+        mock_play.assert_called_once_with("stop")
+
+    def test_play_stop_uses_custom_pssst_wav_when_present(self):
+        """play_stop() plays pssst.wav directly when it exists in CWD."""
+        from psst import audio_cues
+        from psst.audio_cues import _generate_wav
+        with tempfile.TemporaryDirectory() as d:
+            wav_path = Path(d) / "pssst.wav"
+            _generate_wav(wav_path, 330.0, 0.1)
+            # Patch Path.cwd() so the "CWD" is the temp dir containing pssst.wav
+            with patch("pathlib.Path.cwd", return_value=Path(d)):
+                with patch("psst.audio_cues.winsound.PlaySound") as mock_ps:
+                    audio_cues.play_stop()
+            mock_ps.assert_called_once()
+            call_path = mock_ps.call_args[0][0]
+            self.assertIn("pssst.wav", call_path)
+
+    def test_cancel_in_tone_spec(self):
+        from psst.audio_cues import TONE_SPEC
+        self.assertIn("cancel", TONE_SPEC)
+
+    def test_cancel_tone_is_low_frequency(self):
+        from psst.audio_cues import TONE_SPEC
+        freq, dur = TONE_SPEC["cancel"]
+        self.assertLess(freq, 300.0)   # low tone
+        self.assertLess(dur, 0.2)      # short
+
+    def test_play_cancel_function_exists(self):
+        from psst import audio_cues
+        self.assertTrue(hasattr(audio_cues, "play_cancel"))
+
+    def test_play_cancel_calls_play(self):
+        from psst import audio_cues
+        with patch.object(audio_cues, "play") as mock_play:
+            audio_cues.play_cancel()
+        mock_play.assert_called_once_with("cancel")
 
 
 # ---------------------------------------------------------------------------
@@ -350,6 +488,49 @@ class TestRecorder(unittest.TestCase):
         elapsed = r.elapsed()
         self.assertGreater(elapsed, 0.4)
         r._recording = False
+
+
+class TestRecorderCancel(unittest.TestCase):
+    def test_cancel_when_not_recording_does_not_raise(self):
+        from psst.recorder import Recorder
+        r = Recorder()
+        r.cancel()  # must not raise
+
+    def test_cancel_stops_recording(self):
+        import sounddevice as sd
+        from psst.recorder import Recorder
+        r = Recorder(min_duration=0.0)
+        mock_stream = MagicMock()
+        with patch.object(sd, "InputStream", return_value=mock_stream):
+            r.start()
+        self.assertTrue(r.is_recording)
+        r.cancel()
+        self.assertFalse(r.is_recording)
+
+    def test_cancel_discards_chunks(self):
+        """After cancel(), stop() must return None (chunks discarded)."""
+        import sounddevice as sd
+        from psst.recorder import Recorder
+        r = Recorder(min_duration=0.0)
+        mock_stream = MagicMock()
+        with patch.object(sd, "InputStream", return_value=mock_stream):
+            r.start()
+        r._chunks = [np.zeros(1600, dtype="float32")]
+        r._start_time = time.monotonic() - 1.0
+        r.cancel()
+        # Chunks should be cleared; stop() should return None (not recording)
+        result = r.stop()
+        self.assertIsNone(result)
+
+    def test_cancel_twice_does_not_raise(self):
+        import sounddevice as sd
+        from psst.recorder import Recorder
+        r = Recorder(min_duration=0.0)
+        mock_stream = MagicMock()
+        with patch.object(sd, "InputStream", return_value=mock_stream):
+            r.start()
+        r.cancel()
+        r.cancel()  # second cancel — must not raise
 
 
 # ---------------------------------------------------------------------------
@@ -553,7 +734,7 @@ class TestTranscriberCUDADetection(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# psst.cleanup — backend factory
+# psst.cleanup — backend factory and instruction parameter
 # ---------------------------------------------------------------------------
 
 class TestCleanupBackend(unittest.TestCase):
@@ -657,6 +838,51 @@ class TestCleanupBackend(unittest.TestCase):
         with patch.dict("sys.modules", {"llama_cpp": None}):
             result = backend.clean("test input")
         self.assertEqual(result, "test input")
+
+
+class TestCleanupWithInstruction(unittest.TestCase):
+    def test_ollama_uses_custom_instruction(self):
+        """When instruction is passed, it replaces the default SYSTEM_PROMPT."""
+        from psst.cleanup import OllamaBackend
+        import urllib.request
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = b'{"response": "Custom result."}'
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = MagicMock(return_value=False)
+
+        backend = OllamaBackend("http://localhost:11434", "llama3")
+        custom = "Format as bullet points."
+        with patch.object(urllib.request, "urlopen", return_value=mock_resp) as mock_open:
+            result = backend.clean("some text", instruction=custom)
+
+        self.assertEqual(result, "Custom result.")
+        body = json.loads(mock_open.call_args[0][0].data.decode())
+        self.assertEqual(body["system"], custom)
+
+    def test_ollama_uses_default_prompt_when_no_instruction(self):
+        """When instruction=None, SYSTEM_PROMPT must be used."""
+        from psst.cleanup import OllamaBackend, SYSTEM_PROMPT
+        import urllib.request
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = b'{"response": "Result."}'
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = MagicMock(return_value=False)
+
+        backend = OllamaBackend("http://localhost:11434", "llama3")
+        with patch.object(urllib.request, "urlopen", return_value=mock_resp) as mock_open:
+            backend.clean("some text")
+
+        body = json.loads(mock_open.call_args[0][0].data.decode())
+        self.assertEqual(body["system"], SYSTEM_PROMPT)
+
+    def test_clean_signature_accepts_instruction_kwarg(self):
+        """clean() must accept instruction as keyword argument."""
+        from psst.cleanup import OllamaBackend
+        # Port 1 will fail — but we just want to verify the signature
+        backend = OllamaBackend("http://127.0.0.1:1", "model", timeout=1)
+        result = backend.clean("text", instruction="custom instruction")
+        # Should return raw text on connection failure
+        self.assertEqual(result, "text")
 
 
 # ---------------------------------------------------------------------------
@@ -764,6 +990,102 @@ class TestHotkeyListener(unittest.TestCase):
         self.assertTrue(q.empty())
 
 
+class TestHotkeyListenerCancel(unittest.TestCase):
+    def test_cancel_key_queues_cancel_event(self):
+        import keyboard as kb
+        from psst.hotkey import HotkeyListener
+        q = queue.Queue()
+        hl = HotkeyListener("ctrl+space", q, cancel_key="escape")
+        ev = MagicMock()
+        ev.name = "escape"
+        ev.event_type = kb.KEY_DOWN
+        hl._on_key_event(ev)
+        self.assertEqual(q.get_nowait(), ("cancel",))
+
+    def test_cancel_key_repeat_ignored(self):
+        """Second KEY_DOWN on cancel key while already pressed must not re-enqueue."""
+        import keyboard as kb
+        from psst.hotkey import HotkeyListener
+        q = queue.Queue()
+        hl = HotkeyListener("ctrl+space", q, cancel_key="escape")
+        ev = MagicMock()
+        ev.name = "escape"
+        ev.event_type = kb.KEY_DOWN
+        hl._on_key_event(ev)
+        hl._on_key_event(ev)  # repeat
+        self.assertEqual(q.qsize(), 1)
+
+    def test_cancel_key_up_clears_flag_allowing_repress(self):
+        """After KEY_UP, pressing cancel again should queue another cancel."""
+        import keyboard as kb
+        from psst.hotkey import HotkeyListener
+        q = queue.Queue()
+        hl = HotkeyListener("ctrl+space", q, cancel_key="escape")
+        ev_down = MagicMock()
+        ev_down.name = "escape"
+        ev_down.event_type = kb.KEY_DOWN
+        ev_up = MagicMock()
+        ev_up.name = "escape"
+        ev_up.event_type = kb.KEY_UP
+        hl._on_key_event(ev_down)
+        hl._on_key_event(ev_up)
+        hl._on_key_event(ev_down)  # second press after release
+        self.assertEqual(q.qsize(), 2)
+
+    def test_cancel_key_does_not_interfere_with_main_hotkey(self):
+        """Cancel key events must not propagate to the hotkey logic."""
+        import keyboard as kb
+        from psst.hotkey import HotkeyListener
+        q = queue.Queue()
+        hl = HotkeyListener("ctrl+space", q, cancel_key="escape")
+        # Press the main hotkey
+        ev_main = MagicMock()
+        ev_main.name = "space"
+        ev_main.event_type = kb.KEY_DOWN
+        with patch.object(hl, "_modifiers_held", return_value=True):
+            hl._on_key_event(ev_main)
+        self.assertEqual(q.get_nowait(), ("press",))
+        self.assertTrue(q.empty())
+
+    def test_no_cancel_key_param_normal_hotkey_works(self):
+        """Without cancel_key, normal hotkey events still work."""
+        import keyboard as kb
+        from psst.hotkey import HotkeyListener
+        q = queue.Queue()
+        hl = HotkeyListener("ctrl+space", q)  # no cancel_key
+        ev = MagicMock()
+        ev.name = "space"
+        ev.event_type = kb.KEY_DOWN
+        with patch.object(hl, "_modifiers_held", return_value=True):
+            hl._on_key_event(ev)
+        self.assertEqual(q.get_nowait(), ("press",))
+
+    def test_start_returns_false_on_permission_error(self):
+        from psst.hotkey import HotkeyListener
+        q = queue.Queue()
+        hl = HotkeyListener("ctrl+space", q)
+        with patch("psst.hotkey.keyboard.hook", side_effect=PermissionError("no admin")):
+            result = hl.start()
+        self.assertFalse(result)
+
+    def test_start_returns_true_on_success(self):
+        from psst.hotkey import HotkeyListener
+        q = queue.Queue()
+        hl = HotkeyListener("ctrl+space", q)
+        with patch("psst.hotkey.keyboard.hook", return_value=MagicMock()):
+            result = hl.start()
+        self.assertTrue(result)
+        hl.stop()
+
+    def test_start_returns_false_on_os_error(self):
+        from psst.hotkey import HotkeyListener
+        q = queue.Queue()
+        hl = HotkeyListener("ctrl+space", q)
+        with patch("psst.hotkey.keyboard.hook", side_effect=OSError("access denied")):
+            result = hl.start()
+        self.assertFalse(result)
+
+
 # ---------------------------------------------------------------------------
 # psst.ui
 # ---------------------------------------------------------------------------
@@ -829,6 +1151,11 @@ class TestUI(unittest.TestCase):
         ui = UI()
         ui.print_banner("ctrl+space", "base", "cpu (auto)", False)
 
+    def test_print_banner_with_cancel_hotkey(self):
+        from psst.ui import UI
+        ui = UI()
+        ui.print_banner("ctrl+space", "base", "cpu (auto)", False, cancel_hotkey="f1")
+
     def test_print_history_empty_does_not_raise(self):
         from psst.ui import UI
         ui = UI()
@@ -847,6 +1174,84 @@ class TestUI(unittest.TestCase):
         ui.add_to_history(long_text)  # must not raise
 
 
+class TestUINewStates(unittest.TestCase):
+    def test_cancelled_state_exists(self):
+        from psst.ui import State
+        self.assertTrue(hasattr(State, "CANCELLED"))
+
+    def test_set_state_cancelled_no_exception(self):
+        from psst.ui import UI, State
+        ui = UI()
+        ui.set_state(State.CANCELLED)
+        self.assertEqual(ui._state, State.CANCELLED)
+
+    def test_print_admin_warning_no_exception(self):
+        from psst.ui import UI
+        ui = UI()
+        ui.print_admin_warning()  # must not raise
+
+    def test_cancelled_in_state_style_map(self):
+        from psst.ui import State, _STATE_STYLE
+        self.assertIn(State.CANCELLED, _STATE_STYLE)
+
+
+# ---------------------------------------------------------------------------
+# psst.tray
+# ---------------------------------------------------------------------------
+
+class TestTrayIcon(unittest.TestCase):
+    def test_tray_module_importable(self):
+        """psst.tray must be importable even if pystray/Pillow not installed."""
+        import importlib
+        mod = importlib.import_module("psst.tray")
+        self.assertIsNotNone(mod)
+
+    def test_tray_icon_creation_does_not_raise(self):
+        from psst.tray import TrayIcon
+        q = queue.Queue()
+        ti = TrayIcon(q)
+        self.assertIsNotNone(ti)
+
+    def test_tray_stop_when_not_started_does_not_raise(self):
+        from psst.tray import TrayIcon
+        q = queue.Queue()
+        ti = TrayIcon(q)
+        ti.stop()  # must not raise
+
+    def test_tray_update_status_when_not_started_does_not_raise(self):
+        from psst.tray import TrayIcon
+        q = queue.Queue()
+        ti = TrayIcon(q)
+        ti.update_status("Recording...")  # must not raise
+
+    def test_tray_start_skipped_when_unavailable(self):
+        """If pystray is not available, start() is a silent no-op."""
+        import psst.tray as tray_mod
+        q = queue.Queue()
+        ti = tray_mod.TrayIcon(q)
+        with patch.object(tray_mod, "_TRAY_AVAILABLE", False):
+            ti.start()
+        self.assertIsNone(ti._icon)
+
+    def test_tray_quit_puts_event_on_queue(self):
+        """_on_quit must put ('quit',) on the event queue."""
+        from psst.tray import TrayIcon
+        q = queue.Queue()
+        ti = TrayIcon(q)
+        mock_icon = MagicMock()
+        ti._on_quit(mock_icon, None)
+        self.assertEqual(q.get_nowait(), ("quit",))
+
+    def test_tray_make_icon_image(self):
+        """Icon generation should succeed when Pillow is available."""
+        try:
+            from psst.tray import _make_icon_image
+            img = _make_icon_image()
+            self.assertEqual(img.size, (64, 64))
+        except ImportError:
+            self.skipTest("Pillow not installed")
+
+
 # ---------------------------------------------------------------------------
 # psst package
 # ---------------------------------------------------------------------------
@@ -859,6 +1264,10 @@ class TestPackageMetadata(unittest.TestCase):
         self.assertEqual(len(parts), 3, f"Expected X.Y.Z semver, got {__version__!r}")
         for part in parts:
             self.assertTrue(part.isdigit(), f"Non-numeric semver part: {part!r}")
+
+    def test_version_is_0_3_0(self):
+        from psst import __version__
+        self.assertEqual(__version__, "0.3.0")
 
     def test_author_defined(self):
         from psst import __author__

@@ -12,11 +12,14 @@
 #   5. Built-in defaults (no file needed)
 
 # ---------------------------------------------------------------------------
-# Hotkey
+# Hotkeys
 # ---------------------------------------------------------------------------
 # Hold this key combo to record. Release to transcribe.
 # Examples: "ctrl+shift+space", "right ctrl", "f13"
 hotkey = "ctrl+shift+space"
+
+# Press this key while recording to cancel and discard the audio.
+cancel_hotkey = "escape"
 
 # ---------------------------------------------------------------------------
 # Audio recording
@@ -82,13 +85,46 @@ cleanup_timeout = 10
 ollama_url = "http://localhost:11434"
 
 # ---------------------------------------------------------------------------
+# Prompt profiles
+# ---------------------------------------------------------------------------
+# Select which prompt profile the LLM cleanup uses.
+# Use --prompt <name> on the CLI to override at runtime.
+active_prompt = "default"
+
+# Define or override prompt profiles. Three built-in profiles are always
+# available (default, code, actions). Add your own below.
+#
+# [prompts.default]
+# name = "Default Dictation"
+# instruction = "Clean up this dictated text. Fix grammar, punctuation, and remove filler words. Do not change the meaning. Return only the cleaned text."
+#
+# [prompts.code]
+# name = "Code Docstrings"
+# instruction = "This is dictated documentation for code. Format it as a proper docstring. Fix grammar and make it technical and concise."
+#
+# [prompts.actions]
+# name = "Action Items"
+# instruction = "Extract action items from this dictated text. Format as a numbered list of clear, actionable tasks."
+#
+# Example custom profile:
+# [prompts.email]
+# name = "Email Draft"
+# instruction = "Format this dictated text as a professional email. Fix grammar and punctuation. Keep it concise."
+
+# ---------------------------------------------------------------------------
+# Audio cues
+# ---------------------------------------------------------------------------
+# Play audio cues (start/stop/done/cancel tones). Windows only.
+audio_cues = true
+
+# Custom stop sound: place a file named "pssst.wav" in your working directory
+# to use it instead of the generated tone when recording stops.
+
+# ---------------------------------------------------------------------------
 # UI / output
 # ---------------------------------------------------------------------------
 # Number of past transcriptions to keep in session history
 history_size = 10
-
-# Play audio cues (start/stop/done tones). Windows only.
-audio_cues = true
 
 # Write transcriptions to a log file
 log_to_file = false

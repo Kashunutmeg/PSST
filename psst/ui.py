@@ -7,6 +7,7 @@ States:
   PROCESSING   — LLM cleanup is running
   DONE         — text copied to clipboard
   ERROR        — something failed
+  CANCELLED    — recording was cancelled by user
 
 The UI never blocks; all display calls are safe to call from the main thread.
 """
@@ -33,6 +34,7 @@ class State(Enum):
     PROCESSING = auto()
     DONE = auto()
     ERROR = auto()
+    CANCELLED = auto()
 
 
 # Color/label for each state
@@ -43,6 +45,7 @@ _STATE_STYLE: dict[State, tuple[str, str]] = {
     State.PROCESSING:   ("bold cyan",    "Cleaning up..."),
     State.DONE:         ("bold green",   "Copied to clipboard"),
     State.ERROR:        ("bold red",     "Error"),
+    State.CANCELLED:    ("bold yellow",  "Recording Cancelled"),
 }
 
 
@@ -63,11 +66,13 @@ class UI:
         model: str,
         device: str,
         cleanup: bool,
+        cancel_hotkey: str = "escape",
     ) -> None:
         lines = [
             f"[bold cyan]PSST[/] v{__version__} — Push, Speak, Send Text",
             "",
             f"  Hotkey  : [bold]{hotkey}[/]",
+            f"  Cancel  : [bold]{cancel_hotkey}[/]",
             f"  Model   : [bold]{model}[/]",
             f"  Device  : [bold]{device}[/]",
             f"  Cleanup : [bold]{'on' if cleanup else 'off'}[/]",
@@ -85,6 +90,18 @@ class UI:
         )
 
     # ------------------------------------------------------------------
+    # Admin warning
+    # ------------------------------------------------------------------
+
+    def print_admin_warning(self) -> None:
+        """Print a prominent warning about running without admin privileges."""
+        self.console.print(
+            "[bold yellow][!] Running without Admin privileges. "
+            "Global hotkeys are disabled. "
+            "This terminal window must be in focus to start recording.[/]"
+        )
+
+    # ------------------------------------------------------------------
     # State transitions
     # ------------------------------------------------------------------
 
@@ -94,17 +111,20 @@ class UI:
 
         if state == State.RECORDING:
             self._recording_start = time.monotonic()
-            self.console.print(f"[{style}]● {label}[/]")
+            self.console.print(f"[{style}][REC] {label}[/]")
 
         elif state == State.DONE:
             elapsed = ""
             if detail:
                 elapsed = f"  ({len(detail)} chars)"
-            self.console.print(f"[{style}]✓ {label}{elapsed}[/]")
+            self.console.print(f"[{style}][OK] {label}{elapsed}[/]")
 
         elif state == State.ERROR:
             msg = f" — {detail}" if detail else ""
-            self.console.print(f"[{style}]✗ {label}{msg}[/]")
+            self.console.print(f"[{style}][!!] {label}{msg}[/]")
+
+        elif state == State.CANCELLED:
+            self.console.print(f"[{style}][CANCEL] {label}[/]")
 
         elif state == State.IDLE:
             pass  # Idle is silent after the banner

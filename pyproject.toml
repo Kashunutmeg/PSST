@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "psst"
+version = "0.4.0"
+description = "PSST — Push, Speak, Send Text: local speech-to-text dictation"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+dependencies = [
+    "keyboard>=0.13.5",
+    "tomli>=2.0.1; python_version < '3.11'",
+    "sounddevice>=0.4.6",
+    "numpy>=1.24.0",
+    "rich>=13.0.0",
+    "pyperclip>=1.8.2",
+    "faster-whisper>=1.0.0",
+    "pystray>=0.19.0",
+    "Pillow>=10.0.0",
+    "huggingface-hub>=0.20.0",
+]
+
+[project.optional-dependencies]
+llama = ["llama-cpp-python>=0.2.0"]
+
+[project.scripts]
+psst = "psst.main:run"
+
+[tool.setuptools.packages.find]
+include = ["psst*"]

@@ -91,7 +91,7 @@ class Config:
     max_recording_seconds: float = 300.0
 
     # Whisper transcription
-    model: str = "base"
+    model: str = "small"
     device: str = "auto"          # "auto" | "cuda" | "cpu"
     compute_type: str = "auto"    # "auto" | "float16" | "int8" | "float32"
     language: Optional[str] = None  # None = auto-detect
@@ -101,9 +101,12 @@ class Config:
     cleanup_enabled: bool = True
     cleanup_backend: str = "llama_cpp"   # "llama_cpp" | "ollama"
     cleanup_model: str = "qwen3.5:4b"
-    cleanup_timeout: int = 10
+    cleanup_timeout: int = 60
     ollama_url: str = "http://localhost:11434"
     llama_cpp_model_path: str = ""
+    llama_cpp_repo_id: str = "unsloth/Qwen3.5-4B-GGUF"
+    llama_cpp_filename: str = "Qwen3.5-4B-Q4_K_M.gguf"
+    chat_format: str = "chatml"
 
     # Prompt profiles
     active_prompt: str = "default"
@@ -212,6 +215,10 @@ def parse_args() -> argparse.Namespace:
         help="Enable LLM cleanup of transcription",
     )
     parser.add_argument(
+        "--no-cleanup", action="store_true", default=False,
+        help="Disable LLM cleanup (overrides config and --cleanup)",
+    )
+    parser.add_argument(
         "--no-audio-cues", action="store_true", default=False,
         help="Disable audio feedback sounds",
     )
@@ -246,7 +253,9 @@ def get_config() -> Config:
         cfg.hotkey = args.hotkey
     if args.device:
         cfg.device = args.device
-    if args.cleanup is True:
+    if args.no_cleanup:
+        cfg.cleanup_enabled = False
+    elif args.cleanup is True:
         cfg.cleanup_enabled = True
     if args.no_audio_cues:
         cfg.audio_cues = False
@@ -256,5 +265,16 @@ def get_config() -> Config:
         cfg.log_to_file = True
     if args.prompt:
         cfg.active_prompt = args.prompt
+
+    # Validate active prompt profile exists
+    if cfg.active_prompt not in cfg.prompts:
+        import sys as _sys
+        available = ", ".join(sorted(cfg.prompts.keys()))
+        print(
+            f"[PSST] Warning: prompt profile '{cfg.active_prompt}' not found. "
+            f"Available: {available}. Falling back to 'default'.",
+            file=_sys.stderr,
+        )
+        cfg.active_prompt = "default"
 
     return cfg

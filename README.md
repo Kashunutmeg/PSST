@@ -33,7 +33,7 @@ pip install -r requirements.txt
 # 4. (Optional) Copy and edit config
 copy config.example.toml config.toml
 
-# 5. Run  (must be run as Administrator for global hotkeys on Windows)
+# 5. Run  (Administrator recommended for global hotkeys on Windows)
 python -m psst
 ```
 
@@ -50,7 +50,7 @@ Copy `config.example.toml` → `config.toml` and edit. Key settings:
 | Key | Default | Description |
 |-----|---------|-------------|
 | `hotkey` | `ctrl+shift+space` | Hold-to-record key combo |
-| `model` | `base` | Whisper model (tiny/base/small/medium/large-v3) |
+| `model` | `small` | Whisper model (tiny/base/small/medium/large-v3) |
 | `device` | `auto` | `auto`, `cuda`, or `cpu` |
 | `max_recording_seconds` | `300` | Max recording length in seconds (change in `config.toml`) |
 | `cleanup_enabled` | `true` | Enable LLM filler-word cleanup |
@@ -77,18 +77,26 @@ PSST silently falls back to Whisper output — **your dictation is never lost**.
 
 ### llama-cpp-python backend (recommended)
 
-The most plug-and-play option: download a GGUF model file and point the config at it.
+The default Qwen3.5-4B model (~2.7 GB) is **auto-downloaded from Hugging Face**
+on first use — no manual setup required. Just install the runtime:
 
 ```powershell
 # GPU build (adjust CUDA version as needed)
 pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu121
 ```
 
-Download `qwen3.5-4b-instruct-q4_k_m.gguf` (or similar) from Hugging Face, then in `config.toml`:
+That's it — PSST will download and cache the GGUF model automatically.
+
+To use a **different HF model**, change these in `config.toml`:
 ```toml
-cleanup_enabled        = true
-cleanup_backend        = "llama_cpp"
-llama_cpp_model_path   = "C:/models/qwen3.5-4b-instruct-q4_k_m.gguf"
+llama_cpp_repo_id  = "unsloth/Qwen3.5-4B-GGUF"
+llama_cpp_filename = "Qwen3.5-4B-Q4_K_M.gguf"
+chat_format        = "chatml"          # match the model's chat template
+```
+
+To use a **local GGUF file** instead of auto-download, set `llama_cpp_model_path`:
+```toml
+llama_cpp_model_path = "C:/models/your-model.gguf"
 ```
 
 ### Ollama backend
@@ -117,6 +125,7 @@ python -m psst [options]
   --hotkey COMBO       Hotkey combo
   --device {auto,cuda,cpu}
   --cleanup            Enable LLM cleanup
+  --no-cleanup         Disable LLM cleanup (overrides config)
   --no-audio-cues      Disable sound feedback
   --language LANG      Force language (e.g. en, fr)
   --log                Write session log to psst.log
@@ -126,9 +135,10 @@ python -m psst [options]
 ## Architecture
 
 ```
-Thread 1 (main)    — event loop, transcription, LLM, clipboard, UI
-Thread 2 (keyboard)— only puts events on queue
+Thread 1 (main)     — event loop, transcription, LLM, clipboard, UI
+Thread 2 (keyboard) — only puts events on queue
 Thread 3 (PortAudio)— only appends audio chunks
+Thread 4 (tray)     — pystray daemon, only puts ("quit",) on queue
 ```
 
 Key invariant: keyboard and audio threads **never do heavy work**.
@@ -143,7 +153,8 @@ Key invariant: keyboard and audio threads **never do heavy work**.
 | medium | ~5 GB | slow | great |
 | large-v3 | ~10 GB | slowest | best |
 
-Models are downloaded automatically from Hugging Face on first use.
+Both Whisper and LLM cleanup models are downloaded automatically from Hugging Face
+on first use (~2.7 GB for the default cleanup model).
 
 ## Privacy
 

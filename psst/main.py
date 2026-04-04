@@ -244,13 +244,15 @@ def run() -> None:
                         _cue("error")
                         continue
 
+                    raw_text = text
                     text = _cleanup_text(text, cfg, ui)
+                    actually_cleaned = (text != raw_text)
 
                     copied = copy_to_clipboard(text, fallback=cfg.clipboard_fallback)
 
                     if copied:
                         ui.set_state(State.DONE, text)
-                        ui.add_to_history(text, cleaned=cfg.cleanup_enabled)
+                        ui.add_to_history(text, cleaned=actually_cleaned)
                         tray.update_status(f"Idle ({admin_status})")
                         _cue("done")
                         logging.info("Transcribed: %s", text)

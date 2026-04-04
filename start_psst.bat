@@ -12,13 +12,10 @@ if not exist ".venv\Scripts\activate.bat" (
     exit /b 1
 )
 
-:: Check for Administrator privileges (required for global hotkeys)
+:: Admin check — soft warning only (Python handles non-admin gracefully)
 net session >nul 2>&1
 if %ERRORLEVEL% neq 0 (
-    echo [ERROR] PSST must be run as Administrator.
-    echo Right-click start_psst.bat and choose "Run as administrator".
-    pause
-    exit /b 1
+    echo [NOTE] Running without admin — global hotkeys may not work in all windows.
 )
 
 call ".venv\Scripts\activate.bat"

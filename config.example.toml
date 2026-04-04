@@ -34,7 +34,7 @@ max_recording_seconds = 300.0   # 300 = 5 minutes — adjust to taste
 # ---------------------------------------------------------------------------
 # Model sizes (smaller = faster, larger = more accurate):
 #   tiny, base, small, medium, large-v2, large-v3
-model = "base"
+model = "small"
 
 # Device: "auto" detects CUDA; use "cpu" to force CPU
 device = "auto"
@@ -50,7 +50,7 @@ compute_type = "auto"
 vad_filter = true
 
 # ---------------------------------------------------------------------------
-# LLM cleanup  (on by default — requires llama_cpp_model_path or Ollama)
+# LLM cleanup  (on by default — model is auto-downloaded on first use)
 # ---------------------------------------------------------------------------
 # When enabled, Whisper output is passed through a local LLM to fix
 # punctuation, capitalisation, and remove remaining filler words.
@@ -69,14 +69,22 @@ cleanup_backend = "llama_cpp"
 cleanup_model = "qwen3.5:4b"
 
 # Timeout in seconds before falling back to Whisper text
-cleanup_timeout = 10
+cleanup_timeout = 60
+
+# Chat template format used by the LLM (chatml works for Qwen models)
+chat_format = "chatml"
 
 # ---------------------------------------------------------------------------
 # llama_cpp backend (recommended)
 # ---------------------------------------------------------------------------
-# Download a Qwen GGUF from https://huggingface.co and set the path below.
-# Example: qwen3.5-4b-instruct-q4_k_m.gguf
-# llama_cpp_model_path = "C:/models/qwen3.5-4b-instruct-q4_k_m.gguf"
+# By default, PSST auto-downloads a GGUF model from Hugging Face on first use.
+# Change these to use a different model from HF:
+llama_cpp_repo_id = "unsloth/Qwen3.5-4B-GGUF"
+llama_cpp_filename = "Qwen3.5-4B-Q4_K_M.gguf"
+
+# To use a local GGUF file instead of auto-download, set the path below.
+# This overrides repo_id/filename when set.
+# llama_cpp_model_path = "C:/models/your-model.gguf"
 
 # ---------------------------------------------------------------------------
 # Ollama backend
@@ -93,19 +101,19 @@ active_prompt = "default"
 
 # Define or override prompt profiles. Three built-in profiles are always
 # available (default, code, actions). Add your own below.
-#
-# [prompts.default]
-# name = "Default Dictation"
-# instruction = "Clean up this dictated text. Fix grammar, punctuation, and remove filler words. Do not change the meaning. Return only the cleaned text."
-#
-# [prompts.code]
-# name = "Code Docstrings"
-# instruction = "This is dictated documentation for code. Format it as a proper docstring. Fix grammar and make it technical and concise."
-#
-# [prompts.actions]
-# name = "Action Items"
-# instruction = "Extract action items from this dictated text. Format as a numbered list of clear, actionable tasks."
-#
+
+[prompts.default]
+name = "Default Dictation"
+instruction = "Clean up this dictated text. Fix grammar, punctuation, and remove filler words. Do not change the meaning. Return only the cleaned text."
+
+[prompts.code]
+name = "Code Docstrings"
+instruction = "This is dictated documentation for code. Format it as a proper docstring. Fix grammar and make it technical and concise."
+
+[prompts.actions]
+name = "Action Items"
+instruction = "Extract action items from this dictated text. Format as a numbered list of clear, actionable tasks."
+
 # Example custom profile:
 # [prompts.email]
 # name = "Email Draft"

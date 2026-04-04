@@ -17,12 +17,15 @@ System prompt:
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import logging
 import urllib.request
 import urllib.error
 from abc import ABC, abstractmethod
 from typing import Optional
+
+from rich.console import Console
 
 from psst.config import Config
 
@@ -98,8 +101,9 @@ class OllamaBackend(CleanupBackend):
 # ---------------------------------------------------------------------------
 
 class LlamaCppBackend(CleanupBackend):
-    def __init__(self, model_path: str, timeout: int = 10) -> None:
+    def __init__(self, model_path: str, chat_format: str = "chatml", timeout: int = 60) -> None:
         self.model_path = model_path
+        self.chat_format = chat_format
         self.timeout = timeout
         self._llm = None
 
@@ -113,29 +117,87 @@ class LlamaCppBackend(CleanupBackend):
                 "llama-cpp-python is not installed. "
                 "See https://github.com/abetlen/llama-cpp-python for GPU install."
             ) from exc
-        self._llm = Llama(model_path=self.model_path, n_ctx=2048, verbose=False)
+        self._llm = Llama(
+            model_path=self.model_path,
+            n_ctx=2048,
+            chat_format=self.chat_format,
+            verbose=False,
+        )
         return self._llm
 
     def clean(self, text: str, instruction: Optional[str] = None) -> str:
         system = instruction if instruction is not None else SYSTEM_PROMPT
         try:
             llm = self._load()
-            prompt = (
-                f"<|im_start|>system\n{system}<|im_end|>\n"
-                f"<|im_start|>user\n{text}<|im_end|>\n"
-                f"<|im_start|>assistant\n"
-            )
-            output = llm(
-                prompt,
+            output = llm.create_chat_completion(
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": text},
+                ],
                 max_tokens=512,
-                stop=["<|im_end|>"],
-                echo=False,
             )
-            cleaned = output["choices"][0]["text"].strip()
+            cleaned = output["choices"][0]["message"]["content"].strip()
             return cleaned if cleaned else text
         except Exception as exc:
             logging.warning("LlamaCpp cleanup failed: %s — returning raw text", exc)
             return text
+
+
+# ---------------------------------------------------------------------------
+# Model auto-download
+# ---------------------------------------------------------------------------
+
+_console = Console()
+
+
+def _ensure_model(cfg: Config) -> Optional[str]:
+    """Return a path to the GGUF model file, downloading from HF if needed.
+
+    Priority:
+      1. cfg.llama_cpp_model_path (local override) — returned as-is
+      2. cfg.llama_cpp_repo_id / cfg.llama_cpp_filename — downloaded via
+         huggingface_hub and cached locally
+
+    Returns None on any failure (caller should fall back gracefully).
+    """
+    # Local file override — skip download entirely
+    if cfg.llama_cpp_model_path:
+        return cfg.llama_cpp_model_path
+
+    try:
+        from huggingface_hub import hf_hub_download  # type: ignore[import]
+    except ImportError:
+        logging.warning(
+            "huggingface_hub is not installed — cannot auto-download LLM model. "
+            "Install it with: pip install huggingface-hub"
+        )
+        _console.print(
+            "[bold yellow][PSST][/] huggingface-hub is not installed — "
+            "cannot auto-download cleanup model. "
+            "Install it with: pip install huggingface-hub"
+        )
+        return None
+
+    try:
+        _console.print(
+            f"[bold cyan][PSST][/] Downloading cleanup model "
+            f"[bold]{cfg.llama_cpp_filename}[/] from "
+            f"[bold]{cfg.llama_cpp_repo_id}[/] (~2.7 GB, first run only)..."
+        )
+        path = hf_hub_download(
+            repo_id=cfg.llama_cpp_repo_id,
+            filename=cfg.llama_cpp_filename,
+        )
+        _console.print(
+            f"[bold green][PSST][/] Model cached at: [dim]{path}[/]"
+        )
+        return path
+    except Exception as exc:
+        logging.warning("Failed to download LLM model: %s", exc)
+        _console.print(
+            f"[bold yellow][PSST][/] Could not download cleanup model: {exc}"
+        )
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -154,13 +216,26 @@ def get_backend(cfg: Config) -> Optional[CleanupBackend]:
         )
 
     if backend_name in ("llama_cpp", "llama-cpp", "llamacpp"):
-        if not cfg.llama_cpp_model_path:
-            logging.error(
-                "llama_cpp backend requires llama_cpp_model_path in config"
+        # Don't download a 2.7 GB model if the runtime isn't even installed
+        if importlib.util.find_spec("llama_cpp") is None:
+            logging.warning(
+                "llama-cpp-python is not installed — cleanup disabled. "
+                "See https://github.com/abetlen/llama-cpp-python for install instructions."
+            )
+            _console.print(
+                "[bold yellow][PSST][/] llama-cpp-python is not installed — "
+                "LLM cleanup disabled. Install it with:\n"
+                "  pip install llama-cpp-python --extra-index-url "
+                "https://abetlen.github.io/llama-cpp-python/whl/cu121"
             )
             return None
+        model_path = _ensure_model(cfg)
+        if model_path is None:
+            logging.warning("No LLM model available — cleanup disabled.")
+            return None
         return LlamaCppBackend(
-            model_path=cfg.llama_cpp_model_path,
+            model_path=model_path,
+            chat_format=cfg.chat_format,
             timeout=cfg.cleanup_timeout,
         )
 

@@ -14,7 +14,6 @@ Tones:
 from __future__ import annotations
 
 import math
-import os
 import struct
 import wave
 from pathlib import Path
@@ -100,8 +99,21 @@ def _get_paths() -> Dict[str, Path]:
 # ---------------------------------------------------------------------------
 
 def play(name: str) -> None:
-    """Play a named audio cue asynchronously. Silently ignores errors."""
+    """Play a named audio cue asynchronously. Silently ignores errors.
+
+    For the "stop" cue, a custom ``pssst.wav`` in CWD takes priority.
+    """
     try:
+        # Custom stop sound override
+        if name == "stop":
+            custom = Path.cwd() / "pssst.wav"
+            if custom.exists():
+                winsound.PlaySound(
+                    str(custom),
+                    winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_NODEFAULT,
+                )
+                return
+
         paths = _get_paths()
         if name not in paths:
             return
@@ -117,17 +129,6 @@ def play_start() -> None:
     play("start")
 
 def play_stop() -> None:
-    """Play stop sound. Uses custom pssst.wav from CWD if present."""
-    try:
-        custom = Path.cwd() / "pssst.wav"
-        if custom.exists():
-            winsound.PlaySound(
-                str(custom),
-                winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_NODEFAULT,
-            )
-            return
-    except Exception:
-        pass
     play("stop")
 
 def play_done() -> None:

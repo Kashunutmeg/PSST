@@ -20,6 +20,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import logging
+import re
 import urllib.request
 import urllib.error
 from abc import ABC, abstractmethod
@@ -36,8 +37,16 @@ SYSTEM_PROMPT = (
     "Your job: fix punctuation, capitalise sentences, remove filler words "
     "(um, uh, like, you know, sort of), and fix obvious repetitions. "
     "Do NOT change the meaning, add information, or summarise. "
-    "Return ONLY the cleaned text — no preamble, no explanation."
+    "Return ONLY the cleaned text — no preamble, no explanation. "
+    "Do not use <think> tags or show your reasoning."
 )
+
+_THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
+
+
+def _strip_think_tags(text: str) -> str:
+    """Remove <think>...</think> blocks from model output."""
+    return _THINK_RE.sub("", text).strip()
 
 
 # ---------------------------------------------------------------------------
@@ -86,7 +95,7 @@ class OllamaBackend(CleanupBackend):
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 body = json.loads(resp.read().decode("utf-8"))
-                cleaned = body.get("response", "").strip()
+                cleaned = _strip_think_tags(body.get("response", ""))
                 return cleaned if cleaned else text
         except urllib.error.URLError as exc:
             logging.warning("Ollama unavailable: %s — returning raw text", exc)
@@ -101,9 +110,18 @@ class OllamaBackend(CleanupBackend):
 # ---------------------------------------------------------------------------
 
 class LlamaCppBackend(CleanupBackend):
-    def __init__(self, model_path: str, chat_format: str = "chatml", timeout: int = 60) -> None:
+    def __init__(
+        self,
+        model_path: str,
+        chat_format: str = "chatml",
+        n_ctx: int = 4096,
+        max_tokens: int = 1536,
+        timeout: int = 60,
+    ) -> None:
         self.model_path = model_path
         self.chat_format = chat_format
+        self.n_ctx = n_ctx
+        self.max_tokens = max_tokens
         self.timeout = timeout
         self._llm = None
 
@@ -119,7 +137,7 @@ class LlamaCppBackend(CleanupBackend):
             ) from exc
         self._llm = Llama(
             model_path=self.model_path,
-            n_ctx=2048,
+            n_ctx=self.n_ctx,
             chat_format=self.chat_format,
             verbose=False,
         )
@@ -134,9 +152,9 @@ class LlamaCppBackend(CleanupBackend):
                     {"role": "system", "content": system},
                     {"role": "user", "content": text},
                 ],
-                max_tokens=512,
+                max_tokens=self.max_tokens,
             )
-            cleaned = output["choices"][0]["message"]["content"].strip()
+            cleaned = _strip_think_tags(output["choices"][0]["message"]["content"])
             return cleaned if cleaned else text
         except Exception as exc:
             logging.warning("LlamaCpp cleanup failed: %s — returning raw text", exc)
@@ -236,6 +254,8 @@ def get_backend(cfg: Config) -> Optional[CleanupBackend]:
         return LlamaCppBackend(
             model_path=model_path,
             chat_format=cfg.chat_format,
+            n_ctx=cfg.llama_cpp_n_ctx,
+            max_tokens=cfg.llama_cpp_max_tokens,
             timeout=cfg.cleanup_timeout,
         )
 

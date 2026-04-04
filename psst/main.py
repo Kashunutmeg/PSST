@@ -119,9 +119,45 @@ def _setup_logging(cfg: Config) -> None:
 # Main entry point
 # ---------------------------------------------------------------------------
 
+def _set_console_icon() -> None:
+    """Set the console window icon on Windows. Best-effort, silent on failure."""
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        from pathlib import Path
+
+        project_dir = Path(__file__).resolve().parent.parent
+        icon_path = project_dir / "assets" / "icon.ico"
+        if not icon_path.is_file():
+            return
+
+        user32 = ctypes.windll.user32
+        kernel32 = ctypes.windll.kernel32
+
+        IMAGE_ICON = 1
+        LR_LOADFROMFILE = 0x0010
+        WM_SETICON = 0x0080
+        ICON_SMALL = 0
+        ICON_BIG = 1
+
+        hwnd = kernel32.GetConsoleWindow()
+        if not hwnd:
+            return
+
+        icon_path_str = str(icon_path)
+        h_icon = user32.LoadImageW(0, icon_path_str, IMAGE_ICON, 0, 0, LR_LOADFROMFILE)
+        if h_icon:
+            user32.SendMessageW(hwnd, WM_SETICON, ICON_SMALL, h_icon)
+            user32.SendMessageW(hwnd, WM_SETICON, ICON_BIG, h_icon)
+    except Exception:
+        pass
+
+
 def run() -> None:
     cfg = get_config()
     _setup_logging(cfg)
+    _set_console_icon()
 
     ui = UI(history_size=cfg.history_size)
     event_queue: queue.Queue = queue.Queue()
@@ -184,6 +220,19 @@ def run() -> None:
 
     if not admin_mode:
         ui.print_admin_warning()
+
+    # Eager cleanup model init — download + load before the user starts dictating
+    if cfg.cleanup_enabled:
+        ui.print_info("Loading cleanup model...")
+        backend = _get_cleanup(cfg)
+        if backend is not None and hasattr(backend, '_load'):
+            try:
+                backend._load()
+                ui.print_info("Cleanup model ready.")
+            except Exception as exc:
+                ui.print_info(f"Cleanup model failed to load: {exc}")
+        elif backend is None:
+            ui.print_info("Cleanup backend unavailable — falling back to Whisper output.")
 
     ui.set_state(State.IDLE)
 

@@ -107,6 +107,8 @@ class Config:
     llama_cpp_repo_id: str = "unsloth/Qwen3.5-4B-GGUF"
     llama_cpp_filename: str = "Qwen3.5-4B-Q4_K_M.gguf"
     chat_format: str = "chatml"
+    llama_cpp_n_ctx: int = 4096
+    llama_cpp_max_tokens: int = 1536
 
     # Prompt profiles
     active_prompt: str = "default"

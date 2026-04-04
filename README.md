@@ -75,17 +75,23 @@ labelling the result `[cleaned]`.
 If the configured backend cannot be initialised (e.g. no model file set),
 PSST silently falls back to Whisper output — **your dictation is never lost**.
 
+> **Tip:** To skip LLM cleanup entirely, use `--no-cleanup` on the CLI or set
+> `cleanup_enabled = false` in `config.toml`.
+
 ### llama-cpp-python backend (recommended)
 
 The default Qwen3.5-4B model (~2.7 GB) is **auto-downloaded from Hugging Face**
-on first use — no manual setup required. Just install the runtime:
+at startup — no manual setup required. Just install the runtime:
 
 ```powershell
 # GPU build (adjust CUDA version as needed)
 pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu121
 ```
 
-That's it — PSST will download and cache the GGUF model automatically.
+> **Note:** This compiles C++ from source for CUDA support and can take
+> **several minutes** to build. This is normal — be patient during the install.
+
+That's it — PSST will download and cache the GGUF model automatically at startup.
 
 To use a **different HF model**, change these in `config.toml`:
 ```toml
@@ -153,8 +159,15 @@ Key invariant: keyboard and audio threads **never do heavy work**.
 | medium | ~5 GB | slow | great |
 | large-v3 | ~10 GB | slowest | best |
 
-Both Whisper and LLM cleanup models are downloaded automatically from Hugging Face
-on first use (~2.7 GB for the default cleanup model).
+Both Whisper and LLM cleanup models are downloaded automatically from Hugging Face.
+The Whisper model downloads on first transcription; the cleanup model (~2.7 GB)
+downloads at startup so it's ready when you need it.
+
+## Custom icon
+
+Place an `icon.png` or `icon.ico` file in the `assets/` directory to customise
+the system tray icon and console window icon (Windows). If no custom icon is
+found, PSST uses a generated blue "P" fallback.
 
 ## Privacy
 

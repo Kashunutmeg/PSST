@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import queue
 import threading
+from pathlib import Path
 from typing import Optional
 
 try:
@@ -27,22 +28,41 @@ except ImportError:
 # Icon generation
 # ---------------------------------------------------------------------------
 
+_PROJECT_DIR = Path(__file__).resolve().parent.parent
+
+
+def _load_custom_icon() -> "Optional[Image.Image]":
+    """Try to load a custom icon from assets/. Returns None if not found."""
+    for name in ("icon.ico", "icon.png"):
+        candidate = _PROJECT_DIR / "assets" / name
+        if candidate.is_file():
+            try:
+                img = Image.open(str(candidate))
+                img = img.resize((64, 64), Image.LANCZOS)
+                return img.convert("RGBA")
+            except Exception:
+                pass
+    return None
+
+
 def _make_icon_image() -> "Image.Image":
-    """Generate a simple 64×64 PSST tray icon using Pillow."""
+    """Load custom icon from assets/, or generate a 64x64 fallback."""
+    custom = _load_custom_icon()
+    if custom is not None:
+        return custom
+
+    # Fallback: generated blue circle with white "P"
     size = 64
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    # Dark blue filled circle
     margin = 2
     draw.ellipse(
         [margin, margin, size - margin, size - margin],
         fill=(30, 80, 160, 255),
     )
 
-    # White "P" — try to load a large font, fall back gracefully
     try:
-        # load_default(size=N) requires Pillow >= 10.1.0
         font = ImageFont.load_default(size=36)
     except TypeError:
         font = ImageFont.load_default()

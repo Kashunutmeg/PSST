@@ -16,6 +16,8 @@ Pillow>=10.0.0
 # LLM cleanup model auto-download
 huggingface-hub>=0.20.0
 
-# Phase 3: LLM cleanup (optional)
-# llama-cpp-python>=0.2.0   # uncomment and install separately (large, GPU variant)
+# Phase 3: LLM cleanup (CUDA 12.1 wheel — change cu121 to cu122/cu124 for other
+# CUDA versions, or remove the --extra-index-url line for a CPU-only build)
+--extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu121
+llama-cpp-python>=0.2.0
 # ollama                     # not needed; we use urllib.request for HTTP

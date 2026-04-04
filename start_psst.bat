@@ -15,7 +15,7 @@ if not exist ".venv\Scripts\activate.bat" (
 :: Admin check — soft warning only (Python handles non-admin gracefully)
 net session >nul 2>&1
 if %ERRORLEVEL% neq 0 (
-    echo [NOTE] Running without admin — global hotkeys may not work in all windows.
+    echo [NOTE] Running without admin -- global hotkeys may not work in all windows.
 )
 
 call ".venv\Scripts\activate.bat"

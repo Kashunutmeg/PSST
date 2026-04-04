@@ -81,15 +81,20 @@ PSST silently falls back to Whisper output — **your dictation is never lost**.
 ### llama-cpp-python backend (recommended)
 
 The default Qwen3.5-4B model (~2.7 GB) is **auto-downloaded from Hugging Face**
-at startup — no manual setup required. Just install the runtime:
+at startup — no manual setup required. Just install the runtime with GPU support:
 
 ```powershell
-# GPU build (adjust CUDA version as needed)
-pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu121
+# Set CUDA build flag (requires CUDA Toolkit installed)
+$env:CMAKE_ARGS="-DGGML_CUDA=on"
+
+# Install — compiles from source, takes several minutes
+pip install llama-cpp-python --force-reinstall --no-cache-dir
 ```
 
-> **Note:** This compiles C++ from source for CUDA support and can take
+> **Note:** This compiles C++ from source with your CUDA toolkit and can take
 > **several minutes** to build. This is normal — be patient during the install.
+> You need the [CUDA Toolkit](https://developer.nvidia.com/cuda-toolkit) installed.
+> For CPU-only, skip the `CMAKE_ARGS` line.
 
 That's it — PSST will download and cache the GGUF model automatically at startup.
 

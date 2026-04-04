@@ -16,8 +16,11 @@ Pillow>=10.0.0
 # LLM cleanup model auto-download
 huggingface-hub>=0.20.0
 
-# Phase 3: LLM cleanup (CUDA 12.1 wheel — change cu121 to cu122/cu124 for other
-# CUDA versions, or remove the --extra-index-url line for a CPU-only build)
---extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu121
+# Phase 3: LLM cleanup
+# For GPU acceleration, build with CUDA support:
+#   $env:CMAKE_ARGS="-DGGML_CUDA=on"       (PowerShell)
+#   set CMAKE_ARGS=-DGGML_CUDA=on           (cmd.exe)
+# Then run: pip install llama-cpp-python --force-reinstall --no-cache-dir
+# This compiles from source with your local CUDA toolkit (requires CUDA Toolkit installed).
 llama-cpp-python>=0.2.0
 # ollama                     # not needed; we use urllib.request for HTTP

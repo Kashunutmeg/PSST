@@ -41,12 +41,19 @@ SYSTEM_PROMPT = (
     "Do not use <think> tags or show your reasoning."
 )
 
-_THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
+_THINK_CLOSED_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
+_THINK_OPEN_RE = re.compile(r"<think>.*", re.DOTALL)
 
 
 def _strip_think_tags(text: str) -> str:
-    """Remove <think>...</think> blocks from model output."""
-    return _THINK_RE.sub("", text).strip()
+    """Remove <think>...</think> blocks from model output.
+
+    Handles both closed tags and unclosed tags (when output is truncated
+    mid-thinking due to max_tokens).
+    """
+    text = _THINK_CLOSED_RE.sub("", text)
+    text = _THINK_OPEN_RE.sub("", text)
+    return text.strip()
 
 
 # ---------------------------------------------------------------------------
@@ -116,12 +123,14 @@ class LlamaCppBackend(CleanupBackend):
         chat_format: str = "chatml",
         n_ctx: int = 4096,
         max_tokens: int = 1536,
+        n_gpu_layers: int = -1,
         timeout: int = 60,
     ) -> None:
         self.model_path = model_path
         self.chat_format = chat_format
         self.n_ctx = n_ctx
         self.max_tokens = max_tokens
+        self.n_gpu_layers = n_gpu_layers
         self.timeout = timeout
         self._llm = None
 
@@ -138,6 +147,7 @@ class LlamaCppBackend(CleanupBackend):
         self._llm = Llama(
             model_path=self.model_path,
             n_ctx=self.n_ctx,
+            n_gpu_layers=self.n_gpu_layers,
             chat_format=self.chat_format,
             verbose=False,
         )
@@ -256,6 +266,7 @@ def get_backend(cfg: Config) -> Optional[CleanupBackend]:
             chat_format=cfg.chat_format,
             n_ctx=cfg.llama_cpp_n_ctx,
             max_tokens=cfg.llama_cpp_max_tokens,
+            n_gpu_layers=cfg.llama_cpp_n_gpu_layers,
             timeout=cfg.cleanup_timeout,
         )
 

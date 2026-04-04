@@ -228,7 +228,9 @@ def run() -> None:
         if backend is not None and hasattr(backend, '_load'):
             try:
                 backend._load()
-                ui.print_info("Cleanup model ready.")
+                gpu_layers = getattr(backend, 'n_gpu_layers', 0)
+                accel = "GPU" if gpu_layers != 0 else "CPU"
+                ui.print_info(f"Cleanup model ready ({accel}, n_gpu_layers={gpu_layers}).")
             except Exception as exc:
                 ui.print_info(f"Cleanup model failed to load: {exc}")
         elif backend is None:

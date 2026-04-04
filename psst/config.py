@@ -109,6 +109,7 @@ class Config:
     chat_format: str = "chatml"
     llama_cpp_n_ctx: int = 4096
     llama_cpp_max_tokens: int = 1536
+    llama_cpp_n_gpu_layers: int = -1  # -1 = all layers on GPU
 
     # Prompt profiles
     active_prompt: str = "default"

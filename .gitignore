@@ -22,6 +22,9 @@ models/
 # Audio cue files (generated at runtime)
 sounds/
 
+# Generated icon (auto-converted from assets/icon.png)
+assets/icon.ico
+
 # User config (keep example, ignore personal)
 config.toml
 !config.example.toml

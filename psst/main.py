@@ -119,37 +119,41 @@ def _setup_logging(cfg: Config) -> None:
 # Main entry point
 # ---------------------------------------------------------------------------
 
-def _set_console_icon() -> None:
-    """Set the console window icon on Windows. Best-effort, silent on failure.
+def _ensure_ico() -> "Optional[str]":
+    """Ensure assets/icon.ico exists (converting from .png if needed).
 
-    Supports .ico natively and .png via Pillow conversion to a temp .ico file.
+    Returns the .ico path as a string, or None if no icon is available.
     """
+    from pathlib import Path
+    project_dir = Path(__file__).resolve().parent.parent
+    ico_path = project_dir / "assets" / "icon.ico"
+    png_path = project_dir / "assets" / "icon.png"
+
+    if ico_path.is_file():
+        return str(ico_path)
+
+    if png_path.is_file():
+        try:
+            from PIL import Image
+            img = Image.open(str(png_path))
+            sizes = [(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
+            img.save(str(ico_path), format="ICO", sizes=sizes)
+            return str(ico_path)
+        except Exception:
+            pass
+
+    return None
+
+
+def _set_console_icon() -> None:
+    """Set the console window icon on Windows. Best-effort, silent on failure."""
     if sys.platform != "win32":
         return
     try:
         import ctypes
-        from pathlib import Path
 
-        project_dir = Path(__file__).resolve().parent.parent
-
-        # Find the icon file — prefer .ico, fall back to .png
-        ico_path = project_dir / "assets" / "icon.ico"
-        png_path = project_dir / "assets" / "icon.png"
-
-        if ico_path.is_file():
-            icon_file = str(ico_path)
-        elif png_path.is_file():
-            # Convert PNG → temp ICO via Pillow (already a dependency)
-            import tempfile
-            from PIL import Image
-            img = Image.open(str(png_path))
-            # ICO needs specific sizes — include 16, 32, 48 for taskbar/title bar
-            sizes = [(16, 16), (32, 32), (48, 48)]
-            tmp = tempfile.NamedTemporaryFile(suffix=".ico", delete=False)
-            img.save(tmp.name, format="ICO", sizes=sizes)
-            tmp.close()
-            icon_file = tmp.name
-        else:
+        icon_file = _ensure_ico()
+        if not icon_file:
             return
 
         user32 = ctypes.windll.user32
@@ -247,9 +251,36 @@ def run() -> None:
         if backend is not None and hasattr(backend, '_load'):
             try:
                 backend._load()
+                # Detect actual GPU usage from the loaded model
                 gpu_layers = getattr(backend, 'n_gpu_layers', 0)
-                accel = "GPU" if gpu_layers != 0 else "CPU"
-                ui.print_info(f"Cleanup model ready ({accel}, n_gpu_layers={gpu_layers}).")
+                llm = getattr(backend, '_llm', None)
+                if llm is not None:
+                    # Check if llama-cpp-python was built with CUDA support
+                    try:
+                        import llama_cpp
+                        has_cuda = getattr(llama_cpp, 'LLAMA_SUPPORTS_GPU_OFFLOAD', False)
+                        # Also check via llama_backend_init availability
+                        if not has_cuda:
+                            has_cuda = hasattr(llama_cpp.llama_cpp, 'GGML_USE_CUDA') or \
+                                       hasattr(llama_cpp.llama_cpp, 'GGML_USE_CUBLAS')
+                    except Exception:
+                        has_cuda = False
+
+                    if gpu_layers != 0 and not has_cuda:
+                        ui.console.print(
+                            "[bold yellow][!] n_gpu_layers=-1 but llama-cpp-python was "
+                            "built WITHOUT CUDA support -- running on CPU.[/]\n"
+                            "[bold yellow]    To fix: pip install llama-cpp-python --force-reinstall "
+                            "--extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu121[/]"
+                        )
+                        accel = "CPU (CUDA not available)"
+                    elif gpu_layers != 0:
+                        accel = "GPU"
+                    else:
+                        accel = "CPU"
+                else:
+                    accel = "GPU" if gpu_layers != 0 else "CPU"
+                ui.print_info(f"Cleanup model ready ({accel}).")
             except Exception as exc:
                 ui.print_info(f"Cleanup model failed to load: {exc}")
         elif backend is None:

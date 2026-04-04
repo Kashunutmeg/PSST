@@ -120,7 +120,10 @@ def _setup_logging(cfg: Config) -> None:
 # ---------------------------------------------------------------------------
 
 def _set_console_icon() -> None:
-    """Set the console window icon on Windows. Best-effort, silent on failure."""
+    """Set the console window icon on Windows. Best-effort, silent on failure.
+
+    Supports .ico natively and .png via Pillow conversion to a temp .ico file.
+    """
     if sys.platform != "win32":
         return
     try:
@@ -128,8 +131,25 @@ def _set_console_icon() -> None:
         from pathlib import Path
 
         project_dir = Path(__file__).resolve().parent.parent
-        icon_path = project_dir / "assets" / "icon.ico"
-        if not icon_path.is_file():
+
+        # Find the icon file — prefer .ico, fall back to .png
+        ico_path = project_dir / "assets" / "icon.ico"
+        png_path = project_dir / "assets" / "icon.png"
+
+        if ico_path.is_file():
+            icon_file = str(ico_path)
+        elif png_path.is_file():
+            # Convert PNG → temp ICO via Pillow (already a dependency)
+            import tempfile
+            from PIL import Image
+            img = Image.open(str(png_path))
+            # ICO needs specific sizes — include 16, 32, 48 for taskbar/title bar
+            sizes = [(16, 16), (32, 32), (48, 48)]
+            tmp = tempfile.NamedTemporaryFile(suffix=".ico", delete=False)
+            img.save(tmp.name, format="ICO", sizes=sizes)
+            tmp.close()
+            icon_file = tmp.name
+        else:
             return
 
         user32 = ctypes.windll.user32
@@ -145,8 +165,7 @@ def _set_console_icon() -> None:
         if not hwnd:
             return
 
-        icon_path_str = str(icon_path)
-        h_icon = user32.LoadImageW(0, icon_path_str, IMAGE_ICON, 0, 0, LR_LOADFROMFILE)
+        h_icon = user32.LoadImageW(0, icon_file, IMAGE_ICON, 0, 0, LR_LOADFROMFILE)
         if h_icon:
             user32.SendMessageW(hwnd, WM_SETICON, ICON_SMALL, h_icon)
             user32.SendMessageW(hwnd, WM_SETICON, ICON_BIG, h_icon)

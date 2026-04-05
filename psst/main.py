@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import queue
 import sys
+import time
 from typing import Optional
 
 import numpy as np
@@ -341,7 +342,10 @@ def run() -> None:
                 tray.update_status("Transcribing...")
 
                 try:
+                    t0 = time.monotonic()
                     text = _transcribe(audio, cfg, ui)
+                    t1 = time.monotonic()
+                    ui.print_timing("Transcribed", t1 - t0)
 
                     if not text:
                         ui.set_state(State.ERROR, "Empty transcription")
@@ -351,7 +355,10 @@ def run() -> None:
 
                     raw_text = text
                     text = _cleanup_text(text, cfg, ui)
+                    t2 = time.monotonic()
                     actually_cleaned = (text != raw_text)
+                    if actually_cleaned:
+                        ui.print_timing("Cleaned", t2 - t1)
 
                     copied = copy_to_clipboard(text, fallback=cfg.clipboard_fallback)
 

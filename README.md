@@ -81,22 +81,35 @@ PSST silently falls back to Whisper output — **your dictation is never lost**.
 ### llama-cpp-python backend (recommended)
 
 The default Qwen3.5-4B model (~2.7 GB) is **auto-downloaded from Hugging Face**
-at startup — no manual setup required. Just install the runtime with GPU support:
+at startup — no manual setup required.
 
-```powershell
-# Set CUDA build flag (requires CUDA Toolkit installed)
-$env:CMAKE_ARGS="-DGGML_CUDA=on"
+For GPU acceleration, run the bundled build script from a **VS 2022
+Developer Command Prompt**:
 
-# Install — compiles from source, takes several minutes
-pip install llama-cpp-python --force-reinstall --no-cache-dir
-```
+    cd /d D:\PSST
+    build_cuda_llama.bat
 
-> **Note:** This compiles C++ from source with your CUDA toolkit and can take
-> **several minutes** to build. This is normal — be patient during the install.
-> You need the [CUDA Toolkit](https://developer.nvidia.com/cuda-toolkit) installed.
-> For CPU-only, skip the `CMAKE_ARGS` line.
+The script pins llama-cpp-python to `0.3.19` (the newest release that
+supports Qwen3.5 and pre-dates a broken upstream `llama.cpp` submodule
+bump), then compiles from source with `-DGGML_CUDA=on`. Takes ~20 minutes.
 
-That's it — PSST will download and cache the GGUF model automatically at startup.
+Requirements:
+- [CUDA Toolkit 12.4](https://developer.nvidia.com/cuda-12-4-0-download-archive) installed
+- CMake on PATH
+- VS 2022 with C++ build tools (the "Developer Command Prompt" supplies `cl.exe`)
+
+For CPU-only use, skip the build script entirely — `pip install llama-cpp-python`
+(prebuilt CPU wheel) works fine, just slower at inference.
+
+#### Troubleshooting the CUDA build
+
+- `[!] n_gpu_layers=-1 but llama-cpp-python was built WITHOUT CUDA support`
+  with 0.3.x — fixed as of commit `dfb73a7`. Pull latest and rebuild.
+- `Cannot open source file: 'deprecation-warning.cpp'` — you're on 0.3.20;
+  the build script should pin 0.3.19. Check line 24 of `build_cuda_llama.bat`.
+- `cmake: command not found` or wrong cmake — run `where.exe cmake` to see
+  which is first on PATH. The build script rejects CMake paths containing
+  `WILLOW` (retired project directory).
 
 To use a **different HF model**, change these in `config.toml`:
 ```toml

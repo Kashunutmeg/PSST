@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "psst"
-version = "0.5.0"
+version = "0.5.1"
 description = "PSST — Push, Speak, Send Text: local speech-to-text dictation"
 readme = "README.md"
 license = "Apache-2.0"

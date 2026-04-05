@@ -53,8 +53,10 @@ DEFAULT_PROMPTS: Dict[str, Dict[str, str]] = {
     "default": {
         "name": "Default Dictation",
         "instruction": (
-            "Clean up this dictated text. Fix grammar, punctuation, and remove "
-            "filler words. Do not change the meaning. Return only the cleaned text."
+            "Clean up this dictated text. Add punctuation so every sentence "
+            "ends with a period, question mark, or exclamation point. "
+            "Capitalise sentences. Remove filler words. "
+            "Do not change the meaning. Return only the cleaned text."
         ),
     },
     "code": {

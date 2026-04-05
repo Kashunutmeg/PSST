@@ -33,7 +33,7 @@ class TestConfigDefaults(unittest.TestCase):
         self.assertEqual(cfg.channels, 1)
         self.assertAlmostEqual(cfg.min_recording_seconds, 0.3)
         self.assertAlmostEqual(cfg.max_recording_seconds, 300.0)
-        self.assertEqual(cfg.model, "base")
+        self.assertEqual(cfg.model, "small")
         self.assertEqual(cfg.device, "auto")
         self.assertEqual(cfg.compute_type, "auto")
         self.assertIsNone(cfg.language)
@@ -41,7 +41,7 @@ class TestConfigDefaults(unittest.TestCase):
         self.assertTrue(cfg.cleanup_enabled)
         self.assertEqual(cfg.cleanup_backend, "llama_cpp")
         self.assertEqual(cfg.cleanup_model, "qwen3.5:4b")
-        self.assertEqual(cfg.cleanup_timeout, 10)
+        self.assertEqual(cfg.cleanup_timeout, 60)
         self.assertEqual(cfg.ollama_url, "http://localhost:11434")
         self.assertEqual(cfg.llama_cpp_model_path, "")
         self.assertEqual(cfg.history_size, 10)
@@ -53,7 +53,7 @@ class TestConfigDefaults(unittest.TestCase):
     def test_load_config_missing_file_returns_defaults(self):
         from psst.config import load_config
         cfg = load_config("/nonexistent/path/that/does/not/exist.toml")
-        self.assertEqual(cfg.model, "base")
+        self.assertEqual(cfg.model, "small")
         self.assertEqual(cfg.hotkey, "ctrl+shift+space")
 
     def test_load_config_from_toml_file(self):
@@ -115,7 +115,7 @@ class TestConfigDefaults(unittest.TestCase):
         cfg = Config()
         _apply_section(cfg, {"whisper": {"model": "large-v3"}})
         # "whisper_model" not a known field, so it's silently skipped
-        self.assertEqual(cfg.model, "base")  # unchanged
+        self.assertEqual(cfg.model, "small")  # unchanged
 
     def test_find_config_file_nonexistent_override(self):
         from psst.config import _find_config_file
@@ -765,13 +765,17 @@ class TestCleanupBackend(unittest.TestCase):
         cfg.cleanup_backend = "totally_unknown"
         self.assertIsNone(get_backend(cfg))
 
-    def test_get_backend_llama_cpp_no_path_returns_none(self):
+    def test_get_backend_llama_cpp_no_path_returns_none_when_download_fails(self):
         from psst.config import Config
         from psst.cleanup import get_backend
         cfg = Config()
         cfg.cleanup_backend = "llama_cpp"
         cfg.llama_cpp_model_path = ""
-        self.assertIsNone(get_backend(cfg))
+        # With no local path, get_backend falls back to HF auto-download via
+        # _ensure_model. Mock it to return None (simulating a download failure
+        # or missing huggingface_hub) and confirm the backend is disabled.
+        with patch("psst.cleanup._ensure_model", return_value=None):
+            self.assertIsNone(get_backend(cfg))
 
     def test_get_backend_llama_cpp_with_path(self):
         from psst.config import Config
@@ -1267,7 +1271,7 @@ class TestPackageMetadata(unittest.TestCase):
 
     def test_version_is_0_3_0(self):
         from psst import __version__
-        self.assertEqual(__version__, "0.3.0")
+        self.assertEqual(__version__, "0.5.1")
 
     def test_author_defined(self):
         from psst import __author__

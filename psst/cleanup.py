@@ -33,12 +33,15 @@ from psst.config import Config
 
 SYSTEM_PROMPT = (
     "You are a transcription cleanup assistant. "
-    "The user will provide raw speech-to-text output. "
-    "Your job: fix punctuation, capitalise sentences, remove filler words "
-    "(um, uh, like, you know, sort of), and fix obvious repetitions. "
+    "The user will provide raw speech-to-text output. Your job is to:\n"
+    "1. Add punctuation so that EVERY sentence ends with a period (.), "
+    "question mark (?), or exclamation point (!).\n"
+    "2. Capitalise the first letter of every sentence.\n"
+    "3. Remove filler words (um, uh, like, you know, sort of).\n"
+    "4. Fix obvious repetitions (e.g. 'I I I' -> 'I').\n"
     "Do NOT change the meaning, add information, or summarise. "
-    "Return ONLY the cleaned text — no preamble, no explanation. "
-    "Do not use <think> tags or show your reasoning."
+    "Return ONLY the cleaned text — no preamble, no explanation, no reasoning. "
+    "Do not use <think> tags or show your work."
 )
 
 _THINK_CLOSED_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
@@ -157,17 +160,53 @@ class LlamaCppBackend(CleanupBackend):
         system = instruction if instruction is not None else SYSTEM_PROMPT
         try:
             llm = self._load()
+            # Clear KV cache from previous call so each dictation is independent.
+            # Without this, accumulated state from prior calls can exhaust n_ctx
+            # and cause subsequent inferences to fail silently.
+            llm.reset()
+            # Scale output ceiling to input length — cleanup output is roughly
+            # input-sized, not 1536 tokens. Floor at 128 to allow short dictations
+            # to expand, cap at self.max_tokens for pathological long inputs.
+            input_est_tokens = len(text) // 3  # conservative ~3 chars/token
+            effective_max_tokens = min(max(128, input_est_tokens + 64), self.max_tokens)
             output = llm.create_chat_completion(
                 messages=[
                     {"role": "system", "content": system},
                     {"role": "user", "content": text},
+                    # Pre-fill a closed <think> block so reasoning-style models
+                    # (e.g. Qwen3.5) skip straight to the actual response instead
+                    # of burning the entire token budget inside a thinking block.
+                    # Harmless for non-thinking models — they just continue from
+                    # a benign prefix. _strip_think_tags() cleans it up either way.
+                    {"role": "assistant", "content": "<think></think>\n\n"},
                 ],
-                max_tokens=self.max_tokens,
+                max_tokens=effective_max_tokens,
+                temperature=0.2,        # low — cleanup is deterministic, not creative
+                top_p=0.9,
+                top_k=40,
+                repeat_penalty=1.1,     # avoid echo loops
             )
-            cleaned = _strip_think_tags(output["choices"][0]["message"]["content"])
-            return cleaned if cleaned else text
+            raw_output = output["choices"][0]["message"]["content"]
+            cleaned = _strip_think_tags(raw_output)
+            if not cleaned:
+                # Model produced only <think> content (or nothing at all).
+                # Log the raw output preview so we can diagnose.
+                preview = raw_output[:200].replace("\n", " ")
+                logging.warning(
+                    "LlamaCpp returned empty after strip — raw preview: %s", preview
+                )
+                _console.print(
+                    f"[bold yellow][PSST][/] LLM returned only reasoning "
+                    f"(no actual response) — using raw text.\n"
+                    f"[dim]  raw preview: {preview!r}[/]"
+                )
+                return text
+            return cleaned
         except Exception as exc:
             logging.warning("LlamaCpp cleanup failed: %s — returning raw text", exc)
+            _console.print(
+                f"[bold yellow][PSST][/] LLM cleanup failed: {exc} — using raw text."
+            )
             return text
 
 

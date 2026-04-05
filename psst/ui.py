@@ -172,5 +172,9 @@ class UI:
     def print_info(self, msg: str) -> None:
         self.console.print(f"[dim]{msg}[/]")
 
+    def print_timing(self, label: str, seconds: float) -> None:
+        """Print a dim-coloured duration line for a completed phase."""
+        self.console.print(f"[dim]  {label} in {seconds:.1f}s[/]")
+
     def print_quit(self) -> None:
         self.console.print("\n[dim]Goodbye.[/]")

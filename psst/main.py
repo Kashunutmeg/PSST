@@ -255,14 +255,18 @@ def run() -> None:
                 gpu_layers = getattr(backend, 'n_gpu_layers', 0)
                 llm = getattr(backend, '_llm', None)
                 if llm is not None:
-                    # Check if llama-cpp-python was built with CUDA support
+                    # Check if llama-cpp-python was built with GPU offload support.
+                    # 0.3.x exposes this as a function (llama_supports_gpu_offload);
+                    # older versions exposed module-level constants.
                     try:
                         import llama_cpp
-                        has_cuda = getattr(llama_cpp, 'LLAMA_SUPPORTS_GPU_OFFLOAD', False)
-                        # Also check via llama_backend_init availability
-                        if not has_cuda:
-                            has_cuda = hasattr(llama_cpp.llama_cpp, 'GGML_USE_CUDA') or \
-                                       hasattr(llama_cpp.llama_cpp, 'GGML_USE_CUBLAS')
+                        if hasattr(llama_cpp, 'llama_supports_gpu_offload'):
+                            has_cuda = bool(llama_cpp.llama_supports_gpu_offload())
+                        else:
+                            has_cuda = getattr(llama_cpp, 'LLAMA_SUPPORTS_GPU_OFFLOAD', False)
+                            if not has_cuda:
+                                has_cuda = hasattr(llama_cpp.llama_cpp, 'GGML_USE_CUDA') or \
+                                           hasattr(llama_cpp.llama_cpp, 'GGML_USE_CUBLAS')
                     except Exception:
                         has_cuda = False
 
